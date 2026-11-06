@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: phishnet-api
+Version: 1.0.0
+Requires-Python: >=3.10
+Requires-Dist: azure-functions<2.0,>=1.17
+Requires-Dist: fastapi<1.0,>=0.115
+Requires-Dist: structlog<26.0,>=24.1
+Provides-Extra: dev
+Requires-Dist: httpx<1.0,>=0.27; extra == "dev"
+Requires-Dist: pytest<9.0,>=8.0; extra == "dev"
+Requires-Dist: ruff<1.0,>=0.6; extra == "dev"
+Requires-Dist: uvicorn[standard]<1.0,>=0.30; extra == "dev"

@@ -9,10 +9,12 @@ import structlog
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .features import UrlFeatures, extract_features, parse_http_url, score_url
+from .security import SecurityControls, SecurityMiddleware, SecuritySettings
 from .threat_intel import ThreatIntel
 
 
@@ -30,7 +32,10 @@ class ErrorCode(str, Enum):
     VALIDATION_ERROR = "VALIDATION_ERROR"
     BAD_REQUEST = "BAD_REQUEST"
     NOT_FOUND = "NOT_FOUND"
+    RATE_LIMITED = "RATE_LIMITED"
+    REQUEST_TOO_LARGE = "REQUEST_TOO_LARGE"
     INTERNAL_ERROR = "INTERNAL_ERROR"
+    SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE"
 
 
 class ErrorBody(BaseModel):
@@ -77,18 +82,35 @@ class HealthResponse(BaseModel):
     services: dict[str, str]
 
 
+security_settings = SecuritySettings.from_env()
+security_controls = SecurityControls(security_settings)
 app = FastAPI(
     title="PhishNet API",
     description="Explainable URL risk analysis for the PhishNet Chrome extension.",
     version="1.0.0",
+    debug=False,
+    docs_url=None if security_settings.production else "/docs",
+    redoc_url=None if security_settings.production else "/redoc",
+    openapi_url=None if security_settings.production else "/openapi.json",
+)
+app.add_middleware(
+    SecurityMiddleware,
+    settings=security_settings,
+    controls=security_controls,
+)
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=list(security_settings.allowed_hosts),
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=list(security_settings.cors_origins),
     allow_origin_regex=r"chrome-extension://[a-p]{32}",
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
+    allow_credentials=False,
 )
+app.state.security_controls = security_controls
 
 threat_intel = ThreatIntel()
 
@@ -98,11 +120,12 @@ async def log_request(request: Request, call_next):
     started = time.perf_counter()
     try:
         response = await call_next(request)
-    except Exception:
-        logger.exception(
+    except Exception as exc:
+        logger.error(
             "http_request_failed",
             http_method=request.method,
             http_path=request.url.path,
+            error_type=type(exc).__name__,
         )
         raise
     logger.info(
@@ -119,13 +142,20 @@ async def log_request(request: Request, call_next):
 async def validation_error_handler(
     _request: Request, exc: RequestValidationError
 ) -> JSONResponse:
+    details = [
+        {
+            "field": ".".join(str(part) for part in error.get("loc", ())),
+            "reason": error.get("type", "invalid"),
+        }
+        for error in exc.errors()
+    ]
     return JSONResponse(
         status_code=422,
         content={
             "error": {
                 "code": ErrorCode.VALIDATION_ERROR.value,
                 "message": "The request did not match the expected schema.",
-                "details": exc.errors(),
+                "details": details,
             }
         },
     )
@@ -140,14 +170,29 @@ async def http_error_handler(_request: Request, exc: HTTPException) -> JSONRespo
         if exc.status_code == 400
         else ErrorCode.NOT_FOUND
         if exc.status_code == 404
+        else ErrorCode.RATE_LIMITED
+        if exc.status_code == 429
+        else ErrorCode.REQUEST_TOO_LARGE
+        if exc.status_code == 413
+        else ErrorCode.SERVICE_UNAVAILABLE
+        if exc.status_code == 503
         else ErrorCode.INTERNAL_ERROR
+    )
+    message = (
+        "Too many requests. Please try again later."
+        if exc.status_code == 429
+        else "The request body is too large."
+        if exc.status_code == 413
+        else "The service is temporarily unavailable."
+        if exc.status_code == 503
+        else str(exc.detail)
     )
     return JSONResponse(
         status_code=exc.status_code,
         content={
             "error": {
                 "code": code.value,
-                "message": str(exc.detail),
+                "message": message,
                 "details": None,
             }
         },
@@ -156,7 +201,7 @@ async def http_error_handler(_request: Request, exc: HTTPException) -> JSONRespo
 
 @app.exception_handler(Exception)
 async def unhandled_error_handler(_request: Request, exc: Exception) -> JSONResponse:
-    logger.exception("unhandled_api_error", error_type=type(exc).__name__)
+    logger.error("unhandled_api_error", error_type=type(exc).__name__)
     return JSONResponse(
         status_code=500,
         content={
@@ -197,9 +242,9 @@ def analyze(request: AnalyzeRequest) -> AnalysisResponse:
     risk_score, reasons = score_url(features)
     try:
         providers = threat_intel.check(request.url)
-    except Exception:
+    except Exception as exc:
         # Optional enhancement providers must never suppress the baseline result.
-        logger.exception("threat_intelligence_unavailable")
+        logger.error("threat_intelligence_unavailable", error_type=type(exc).__name__)
         providers = []
     matched_sources = [
         provider.name for provider in providers if provider.matched is True
@@ -287,4 +332,5 @@ if __name__ == "__main__":
         host=os.getenv("PHISHNET_HOST", "127.0.0.1"),
         port=int(os.getenv("PHISHNET_PORT", "7071")),
         reload=False,
+        proxy_headers=False,
     )

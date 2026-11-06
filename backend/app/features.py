@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import ipaddress
+import re
+import socket
 from dataclasses import asdict, dataclass
 from urllib.parse import SplitResult, urlsplit
 
@@ -50,7 +52,52 @@ def parse_http_url(url: str) -> SplitResult:
     if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc or not hostname:
         raise ValueError("Only absolute HTTP and HTTPS URLs can be analyzed.")
 
+    _validate_hostname(hostname)
+
     return parsed
+
+
+def _validate_hostname(hostname: str) -> None:
+    normalized = hostname.rstrip(".").lower()
+    if not normalized:
+        raise ValueError("Enter a URL with a valid hostname.")
+
+    try:
+        address = ipaddress.ip_address(normalized)
+    except ValueError:
+        address = None
+
+    if address is not None:
+        if not address.is_global:
+            raise ValueError("Local, private, and reserved IP addresses cannot be analyzed.")
+        return
+
+    if normalized == "localhost" or normalized.endswith(".localhost"):
+        raise ValueError("Local hostnames cannot be analyzed.")
+
+    if re.fullmatch(r"(?:0x[0-9a-f]+|[0-9.]+)", normalized):
+        try:
+            legacy_address = socket.inet_aton(normalized)
+        except OSError:
+            legacy_address = None
+        if legacy_address is not None:
+            canonical_address = str(ipaddress.ip_address(legacy_address))
+            if canonical_address != normalized:
+                raise ValueError("Non-standard IP address formats cannot be analyzed.")
+
+    try:
+        ascii_hostname = normalized.encode("idna").decode("ascii")
+    except UnicodeError as exc:
+        raise ValueError("Enter a URL with a valid hostname.") from exc
+
+    labels = ascii_hostname.split(".")
+    if len(ascii_hostname) > 253 or any(
+        not label
+        or len(label) > 63
+        or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label)
+        for label in labels
+    ):
+        raise ValueError("Enter a URL with a valid hostname.")
 
 
 def extract_features(url: str) -> UrlFeatures:
