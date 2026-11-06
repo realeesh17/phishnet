@@ -3,15 +3,16 @@ import {
   Badge,
   Button,
   Card,
-  CardHeader,
   Input,
   Spinner,
   Text,
 } from "@fluentui/react-components";
 import {
+  ArrowClockwise24Regular,
   ArrowLeft24Regular,
   ArrowRight24Regular,
   CheckmarkCircle24Regular,
+  Copy24Regular,
   Globe24Regular,
   Search24Regular,
   ShieldCheckmark24Regular,
@@ -30,9 +31,9 @@ const sampleUrls = [
     entry: "Active tab or manual",
   },
   {
-    url: "http://192.0.2.25/sign-in",
+    url: "https://8.8.8.8/sign-in",
     label: "IP literal",
-    description: "Reserved documentation address for checking explainable URL features.",
+    description: "Public IP example for checking explainable URL features; the API does not retrieve the website.",
     entry: "Manual",
   },
   {
@@ -51,10 +52,13 @@ const verdictText: Record<AnalysisResult["verdict"], string> = {
 
 function App() {
   const [page, setPage] = useState<Page>("scan");
-  const [url, setUrl] = useState(sampleUrls[0].url);
+  const [url, setUrl] = useState("");
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [analysisTime, setAnalysisTime] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [retryUrl, setRetryUrl] = useState("");
+  const [notice, setNotice] = useState("");
   const [health, setHealth] = useState<ApiHealth | null>(null);
   const [healthError, setHealthError] = useState("");
 
@@ -78,23 +82,41 @@ function App() {
   }, []);
 
   async function analyze(targetUrl: string) {
+    const submittedUrl = targetUrl.trim();
     setError("");
     setAnalysis(null);
+    setAnalysisTime(null);
+    setRetryUrl("");
     setLoading(true);
     try {
-      const result = await api.analyze(targetUrl.trim());
+      const result = await api.analyze(submittedUrl);
       setAnalysis(result);
-      setUrl(targetUrl.trim());
+      setAnalysisTime(new Date());
+      setUrl(submittedUrl);
       setPage("result");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The analysis request failed.");
+      setRetryUrl(submittedUrl);
     } finally {
       setLoading(false);
     }
   }
 
+  async function copyAnalyzedUrl() {
+    if (!analysis) return;
+    try {
+      await navigator.clipboard.writeText(analysis.url);
+      setNotice("URL copied");
+      window.setTimeout(() => setNotice(""), 2200);
+    } catch {
+      setNotice("Could not copy this URL");
+      window.setTimeout(() => setNotice(""), 3000);
+    }
+  }
+
   async function analyzeCurrentTab() {
     setError("");
+    setRetryUrl("");
     if (typeof chrome === "undefined" || !chrome.tabs?.query) {
       setError("Current-tab access is only available in the installed Chrome extension.");
       return;
@@ -116,9 +138,7 @@ function App() {
     void analyze(url);
   }
 
-  const isLoading = loading;
-  const visibleError = error;
-  const result = analysis;
+  const currentHost = getHostname(url);
 
   function choosePage(nextPage: Page) {
     setPage(nextPage);
@@ -157,7 +177,15 @@ function App() {
       <main className="main-content">
         {page === "scan" && (
           <>
-            <SectionHeading title="Check a URL" hint="Analysis is request-scoped" icon={<Search24Regular />} />
+            <SectionHeading title="Check before you click" hint="One URL, one live analysis" icon={<Search24Regular />} />
+            <div className="current-site" aria-live="polite">
+              <span className="current-site-mark" aria-hidden="true"><Globe24Regular /></span>
+              <span className="current-site-copy">
+                <span className="eyebrow">URL PREVIEW</span>
+                <strong>{currentHost || "No website selected"}</strong>
+              </span>
+              <span className="manual-scan-label">Manual scan</span>
+            </div>
             <form className="scan-form" onSubmit={submit}>
               <label className="field-label" htmlFor="scan-url">URL to analyze</label>
               <Input
@@ -165,59 +193,62 @@ function App() {
                 type="url"
                 value={url}
                 onChange={(_, data) => setUrl(data.value)}
-                placeholder="https://news.example/"
+                placeholder="https://example.com/"
                 required
                 maxLength={2048}
                 contentBefore={<Globe24Regular />}
                 aria-describedby="scan-help"
               />
-              <Text id="scan-help" className="field-help">Paste a URL, or use the active tab URL when available.</Text>
+              <Text id="scan-help" className="field-help">The URL is sent to your configured PhishNet API for analysis.</Text>
               <div className="form-actions">
-                <Button type="button" appearance="secondary" icon={<ArrowRight24Regular />} onClick={() => void analyzeCurrentTab()} disabled={isLoading}>
+                <Button type="button" appearance="secondary" icon={<ArrowRight24Regular />} onClick={() => void analyzeCurrentTab()} disabled={loading}>
                   Use current tab
                 </Button>
-                <Button appearance="primary" type="submit" icon={<Search24Regular />} disabled={isLoading || !url.trim()}>
+                <Button appearance="primary" type="submit" icon={<Search24Regular />} disabled={loading || !url.trim()}>
                   Analyze URL
                 </Button>
               </div>
             </form>
 
-            {isLoading && <StateMessage kind="loading" message="Analyzing URL…" />}
-            {visibleError && <StateMessage kind="error" message={visibleError} />}
+            {loading && <StateMessage kind="loading" message="Analyzing URL…" />}
+            {error && <StateMessage kind="error" message={error} action={retryUrl ? <Button appearance="subtle" size="small" icon={<ArrowClockwise24Regular />} onClick={() => void analyze(retryUrl)}>Retry</Button> : undefined} />}
 
-            <SectionHeading title="Example inputs" hint="Reserved sample domains" />
-            <div className="sample-list">
-              {sampleUrls.map((sample) => (
-                <Card key={sample.url} className="sample-card">
-                  <div className="sample-heading">
-                    <Text as="h3" className="sample-url">{sample.url}</Text>
-                    <Badge appearance="outline" color={sample.label === "HTTPS example" ? "informative" : "warning"}>{sample.label}</Badge>
-                  </div>
-                  <Text className="sample-description">{sample.description}</Text>
-                  <div className="sample-footer">
-                    <span>Entry: {sample.entry}</span><span aria-hidden="true">·</span><span>Not persisted</span>
-                    <Button appearance="subtle" size="small" onClick={() => setUrl(sample.url)}>Use URL</Button>
-                  </div>
-                </Card>
-              ))}
-            </div>
+            <details className="sample-details">
+              <summary><span>Try a reserved sample</span><span>3 examples</span></summary>
+              <div className="sample-list">
+                {sampleUrls.map((sample) => (
+                  <Card key={sample.url} className="sample-card">
+                    <div className="sample-heading">
+                      <Text as="h3" className="sample-url">{sample.url}</Text>
+                      <Badge appearance="outline" color={sample.label === "HTTPS example" ? "informative" : "warning"}>{sample.label}</Badge>
+                    </div>
+                    <Text className="sample-description">{sample.description}</Text>
+                    <div className="sample-footer">
+                      <span>{sample.entry}</span><span aria-hidden="true">·</span><span>Not persisted</span>
+                      <Button appearance="subtle" size="small" onClick={() => setUrl(sample.url)}>Use URL</Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </details>
           </>
         )}
 
         {page === "result" && (
           <>
-            <SectionHeading title="Explainable analysis" hint="Live API response" icon={<Warning24Regular />} />
-            {isLoading && <StateMessage kind="loading" message="Analyzing URL…" />}
-            {visibleError && <StateMessage kind="error" message={visibleError} />}
-            {result ? (
-              <AnalysisView analysis={result} onScan={() => choosePage("scan")} />
-            ) : !isLoading && !visibleError ? (
+            <SectionHeading title="Scan result" hint="Live response from PhishNet" icon={<Warning24Regular />} />
+            {loading && <StateMessage kind="loading" message="Analyzing URL…" />}
+            {error && <StateMessage kind="error" message={error} action={retryUrl ? <Button appearance="subtle" size="small" icon={<ArrowClockwise24Regular />} onClick={() => void analyze(retryUrl)}>Retry</Button> : undefined} />}
+            {analysis ? (
+              <AnalysisView analysis={analysis} checkedAt={analysisTime} onCopy={() => void copyAnalyzedUrl()} onScan={() => choosePage("scan")} />
+            ) : !loading && !error ? (
               <EmptyState
                 title="No analysis to show"
                 description="Analyze a URL to see its baseline signals and optional source-check status. No scan history is saved."
                 action={<Button appearance="primary" icon={<Search24Regular />} onClick={() => choosePage("scan")}>Scan a URL</Button>}
               />
             ) : null}
+            {notice && <div className="toast" role="status">{notice}</div>}
           </>
         )}
 
@@ -235,7 +266,7 @@ function App() {
               {healthError && <StateMessage kind="error" message={healthError} />}
             </div>
             <SectionHeading title="Matches for this URL" hint="Current request only" />
-            {result && analysis ? (
+            {analysis ? (
               <div className="matches-card">
                 <Text className="checked-url">{analysis.url}</Text>
                 <SourceMatch name="OpenPhish" check={analysis.sourceChecks.openphish} />
@@ -256,7 +287,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <span>Baseline signals are explanatory, not a guarantee.</span>
+        <span><ShieldCheckmark24Regular /> Analysis is advisory, not a guarantee.</span>
         <span>No scan history saved</span>
       </footer>
     </div>
@@ -272,37 +303,59 @@ function SectionHeading({ title, hint, icon }: { title: string; hint: string; ic
   );
 }
 
-function StateMessage({ kind, message }: { kind: "loading" | "error"; message: string }) {
+function StateMessage({ kind, message, action }: { kind: "loading" | "error"; message: string; action?: ReactNode }) {
   return (
     <div className={`state-message ${kind}`} role={kind === "error" ? "alert" : "status"}>
       {kind === "loading" ? <Spinner size="tiny" /> : <Warning24Regular />}
       <Text>{message}</Text>
+      {action}
     </div>
   );
 }
 
-function AnalysisView({ analysis, onScan }: { analysis: AnalysisResult; onScan: () => void }) {
-  const concern = analysis.verdict !== "low_concern";
+function AnalysisView({ analysis, checkedAt, onCopy, onScan }: { analysis: AnalysisResult; checkedAt: Date | null; onCopy: () => void; onScan: () => void }) {
+  const severity = analysis.verdict === "high_risk" ? "danger" : analysis.verdict === "review" ? "warning" : "safe";
+  const title = severity === "danger" ? "Threat intelligence match" : severity === "warning" ? "Needs a closer look" : "No obvious warning signs";
+  const description = severity === "danger"
+    ? "A threat-intelligence source reported a match. Avoid opening this website."
+    : severity === "warning"
+      ? "URL signals warrant caution. The available analysis could not establish this site's safety."
+      : "No configured URL risk indicators were detected. This does not guarantee the website is safe.";
   return (
     <>
-      <Card className={`analysis-card ${concern ? "caution" : "clear"}`}>
-        <CardHeader
-          header={<Text as="h3" className="analysis-url">{analysis.url}</Text>}
-          action={<Badge appearance="tint" color={concern ? "warning" : "success"} icon={concern ? <Warning24Regular /> : <CheckmarkCircle24Regular />}>{verdictText[analysis.verdict]}</Badge>}
-        />
-        <Text className="illustrative-note">Baseline signals are advisory and do not guarantee that a URL is safe or malicious.</Text>
-        <h4>Signals that informed this result</h4>
+      <Card className={`analysis-card ${severity}`}>
+        <div className="verdict-banner">
+          <span className="verdict-icon" aria-hidden="true">{severity === "safe" ? <CheckmarkCircle24Regular /> : <Warning24Regular />}</span>
+          <div className="verdict-copy">
+            <Badge appearance="outline" color={severity === "danger" ? "danger" : severity === "warning" ? "warning" : "success"}>{verdictText[analysis.verdict]}</Badge>
+            <h3>{title}</h3>
+            <p>{description}</p>
+          </div>
+        </div>
+        <div className="result-url-row">
+          <div className="result-url-copy">
+            <span className="eyebrow">ANALYZED URL</span>
+            <Text as="p" className="analysis-url">{analysis.url}</Text>
+            {checkedAt && <span className="checked-at">Checked {checkedAt.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>}
+          </div>
+          <Button appearance="subtle" size="small" icon={<Copy24Regular />} onClick={onCopy} aria-label="Copy analyzed URL" title="Copy analyzed URL" />
+        </div>
+        <h4>Signals behind this result</h4>
         <ul className="indicator-list">
           {analysis.indicators.map((indicator) => (
             <li key={indicator.code}>
-              <span className="indicator-icon"><CheckmarkCircle24Regular /></span>
+              <span className="indicator-icon" aria-hidden="true">{severity === "safe" ? <CheckmarkCircle24Regular /> : <Warning24Regular />}</span>
               <span><strong>{indicator.label}</strong><small>{indicator.detail}</small></span>
             </li>
           ))}
         </ul>
+        <div className="result-meta">
+          {typeof analysis.risk_score === "number" && <div><span className="eyebrow">HEURISTIC SCORE</span><strong>{analysis.risk_score.toFixed(2)} <small>/ 1.00</small></strong></div>}
+          {analysis.model && <div><span className="eyebrow">ANALYSIS ENGINE</span><strong>{analysis.model.replaceAll("_", " ")}</strong></div>}
+        </div>
         <div className="source-summary">
-          <span>OpenPhish: {formatSourceStatus(analysis.sourceChecks.openphish.status)}</span>
-          <span>PhishTank: {formatSourceStatus(analysis.sourceChecks.phishtank.status)}</span>
+          <SourceMatch name="OpenPhish" check={analysis.sourceChecks.openphish} />
+          <SourceMatch name="PhishTank" check={analysis.sourceChecks.phishtank} />
         </div>
       </Card>
       <div className="action-bar">
@@ -313,11 +366,13 @@ function AnalysisView({ analysis, onScan }: { analysis: AnalysisResult; onScan: 
 }
 
 function SourceMatch({ name, check }: { name: string; check: AnalysisResult["sourceChecks"]["openphish"] }) {
+  const label = check.matched === true ? "Match found" : check.matched === false && check.status === "available" ? "No match" : formatSourceStatus(check.status);
+  const color = check.matched === true ? "danger" : check.matched === false && check.status === "available" ? "success" : check.status === "unavailable" || check.status === "not_configured" ? "warning" : "informative";
   return (
     <div className="source-match">
       <Text weight="semibold">{name}</Text>
-      <Badge appearance="outline" color={check.matched ? "danger" : "informative"}>
-        {check.matched ? "Match found" : formatSourceStatus(check.status)}
+      <Badge appearance="outline" color={color}>
+        {label}
       </Badge>
     </div>
   );
@@ -338,6 +393,14 @@ function formatSourceStatus(status: AnalysisResult["sourceChecks"]["openphish"][
   if (status === "not_configured") return "not configured";
   if (status === "unavailable") return "temporarily unavailable";
   return "checked";
+}
+
+function getHostname(value: string) {
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return "";
+  }
 }
 
 function formatServiceStatus(status: string | undefined, error: string) {

@@ -21,6 +21,10 @@ export interface AnalysisResult {
     openphish: SourceCheck;
     phishtank: SourceCheck;
   };
+  risk_score?: number;
+  model?: string;
+  features?: Record<string, number | boolean | null>;
+  reasons?: string[];
 }
 
 export interface ApiHealth {

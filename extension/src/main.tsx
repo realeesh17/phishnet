@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { FluentProvider, createLightTheme } from "@fluentui/react-components";
+import { FluentProvider, createDarkTheme } from "@fluentui/react-components";
 import App from "./App";
 import "./style.css";
 
@@ -24,17 +24,20 @@ const brand = {
 };
 
 const theme = {
-  ...createLightTheme(brand),
-  colorBrandForeground1: "#0F766E",
-  colorBrandForeground2: "#0B5D56",
-  colorBrandBackground: "#0F766E",
-  colorBrandBackgroundHover: "#0B5D56",
-  colorBrandBackgroundPressed: "#0A4641",
-  colorNeutralBackground1: "#FFFFFF",
-  colorNeutralBackground2: "#F4F7F9",
-  colorNeutralForeground1: "#102A43",
-  colorNeutralForeground2: "#52667A",
-  colorNeutralStroke1: "#D8E1E8",
+  ...createDarkTheme(brand),
+  colorBrandForeground1: "#72DDB0",
+  colorBrandForeground2: "#A1F0CB",
+  colorBrandBackground: "#167B59",
+  colorBrandBackgroundHover: "#1B9169",
+  colorBrandBackgroundPressed: "#0E684A",
+  colorNeutralBackground1: "#141D1B",
+  colorNeutralBackground2: "#192421",
+  colorNeutralBackground3: "#202E29",
+  colorNeutralForeground1: "#F1F6F4",
+  colorNeutralForeground2: "#A0B2AC",
+  colorNeutralForeground3: "#83948E",
+  colorNeutralStroke1: "#30413A",
+  colorNeutralStroke2: "#28362F",
 };
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
