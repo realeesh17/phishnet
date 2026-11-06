@@ -3,10 +3,10 @@
 > This plan is the source of truth for generating the
 > VS Code debug setup in this workspace.
 >
-> **Status:** Planning
+> **Status:** Implemented
 > **Execution Mode:** Guided
 > **Created:** 2026-11-06T11:42:42+05:30
-> **Last Updated:** 2026-11-06T11:42:42+05:30
+> **Last Updated:** 2026-11-06T11:56:12+05:30
 >
 > <!-- Guided Mode (default) - hand-holds the user through review and approval before generating. -->
 
@@ -130,3 +130,15 @@ No additional convenience scripts are planned. Existing `npm run dev`, `npm run 
 2. **Emulator startup:** If the Functions path is selected, approve adding an Azurite startup task that uses the existing Compose configuration (and verify the Docker/Podman runtime first). Do not start the Compose API alongside local Uvicorn on port 7071.
 3. **Existing configuration preservation:** Confirm that future generation may merge the existing `.vscode/launch.json` and `.vscode/tasks.json` only, while leaving `docker-compose.yml`, source, and current smoke scripts unchanged unless a specific change is approved.
 4. **Smoke test scope:** Keep the existing three smoke scripts only, or approve an additional invalid-request smoke case for `POST /api/analyze` (expected HTTP 422).
+
+## Debug Configuration Checklist
+
+✅ PhishNet API (debug) — FastAPI/Uvicorn started on `127.0.0.1:7071`; generated smoke invocations for `/health`, `/api/health`, and `/api/analyze` each returned HTTP 200. This validates the fallback server and endpoints, not VS Code debugger attachment or the Functions host.
+✅ PhishNet Extension (debug) — Vite reported `Local: http://localhost:5173/`; HTTP verification returned 200. `npm run build` also passed. Chrome debugger launch itself was not exercised.
+❌ Debug All Services — VS Code compound orchestration was not run. The Functions Core Tools command `func` was not present, Docker was unavailable, and Azurite was not started; therefore the Functions-host/Azurite dependency path and compound startup ordering remain unverified.
+
+## Generation and Validation Limitations
+
+- **Python debug support:** The generated API configuration uses the Python `debugpy` adapter to launch the README-documented FastAPI/Uvicorn fallback, not the Azure Functions Python worker. The Functions/Python reference is marked planned, and Azure Functions Core Tools was not installed or available on PATH. Select an interpreter with the backend requirements installed and install/recommend the VS Code Python and Python Debugger extensions. Add a separate Functions-host debugging path only after Core Tools and its local storage dependency are available.
+- **Docker/Compose:** Docker was unavailable. Docker was not installed or started, Compose was not invoked or validated, and no claim is made that the existing `docker-compose.yml` runs. The file remains unchanged. No Azurite startup task is included in this fallback configuration.
+- **Compound:** Per-service server/build smoke checks passed as recorded above; the actual VS Code compound launch was not run, so its coordinated debugger behavior is explicitly unverified.

@@ -11,3 +11,4 @@ local.settings.json
 .python_packages/
 .func/
 *.tsbuildinfo
+.copilot-azure/
