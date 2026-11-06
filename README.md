@@ -156,12 +156,6 @@ Content-Type: application/json
 
 > Adjust the endpoint and fields to match your code.
 
-## 📸 Screenshots
-
-| Safe site | Phishing warning |
-|---|---|
-| _add screenshot_ | _add screenshot_ |
-
 ## 🗺️ Roadmap
 
 - [ ] Add page-content analysis (forms, hidden fields)
