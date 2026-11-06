@@ -73,7 +73,6 @@ Phishing is still one of the most common ways attackers steal passwords and mone
 | SVM | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
 | XGBoost | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
 
-> Replace `_TBD_` with your real results.
 
 ## 🧰 Tech Stack
 
