@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import asyncio
 import time
 from enum import Enum
 from typing import Any, Literal
@@ -14,8 +15,16 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .features import UrlFeatures, extract_features, parse_http_url, score_url
+from .dns_intelligence import collect_dns
+from .domain_intelligence import lookup_domain
+from .http_analyzer import analyze_http
+from .ip_intelligence import collect_ip_intelligence
+from .phishing_analyzer import build_phishing_analysis
+from .report_builder import build_intelligence_report
 from .security import SecurityControls, SecurityMiddleware, SecuritySettings
 from .threat_intel import ThreatIntel
+from .url_parser import parse_url
+from .ssl_analyzer import analyze_ssl
 
 
 structlog.configure(
@@ -72,9 +81,20 @@ class AnalysisResponse(BaseModel):
     # Diagnostic details supplement the approved plan response.
     risk_score: float
     model: str
-    features: dict[str, int | bool | None]
+    features: dict[str, Any]
     reasons: list[str]
     threat_intelligence: dict[str, object]
+    normalized_url: str
+    url_parts: dict[str, Any]
+    domain_info: dict[str, Any]
+    dns: dict[str, Any]
+    ip_intelligence: list[dict[str, Any]]
+    resolved_ip_addresses: list[str]
+    ssl: dict[str, Any]
+    http: dict[str, Any]
+    redirects: list[dict[str, Any]]
+    phishing: dict[str, Any]
+    scan_metadata: dict[str, Any]
 
 
 class HealthResponse(BaseModel):
@@ -227,21 +247,24 @@ def api_health() -> HealthResponse:
             "analysis": "healthy",
             "openphish": "available" if threat_intel.openphish_enabled else "not_configured",
             "phishtank": "available" if threat_intel.phishtank_api_key else "not_configured",
+            "intelligence": "healthy",
         },
     )
 
 
 @app.post("/api/analyze", response_model=AnalysisResponse)
-def analyze(request: AnalyzeRequest) -> AnalysisResponse:
+@app.post("/analyze", response_model=AnalysisResponse, include_in_schema=False)
+async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
     try:
         parse_http_url(request.url)
         features = extract_features(request.url)
+        parsed = parse_url(request.url)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     risk_score, reasons = score_url(features)
     try:
-        providers = threat_intel.check(request.url)
+        providers = await asyncio.to_thread(threat_intel.check, request.url)
     except Exception as exc:
         # Optional enhancement providers must never suppress the baseline result.
         logger.error("threat_intelligence_unavailable", error_type=type(exc).__name__)
@@ -285,6 +308,35 @@ def analyze(request: AnalyzeRequest) -> AnalysisResponse:
             error=provider.error if provider else "Provider check failed.",
         )
 
+    domain_info, dns_info, http_info = await asyncio.gather(
+        _safe_lookup(lookup_domain, parsed),
+        _safe_lookup(collect_dns, parsed),
+        _safe_lookup(analyze_http, parsed),
+    )
+    addresses = dns_info.get("resolved_ip_addresses", [])
+    ip_info = await _safe_lookup(collect_ip_intelligence, addresses)
+    if not isinstance(ip_info, list):
+        ip_info = []
+    ssl_info = await _safe_lookup(analyze_ssl, parsed, addresses)
+    phishing = build_phishing_analysis(
+        features,
+        risk_score,
+        reasons,
+        providers,
+        domain_info,
+        http_info,
+        ssl_info,
+    )
+    report = build_intelligence_report(
+        parsed,
+        dns_info,
+        ip_info,
+        domain_info,
+        ssl_info,
+        http_info,
+        phishing,
+    )
+
     return AnalysisResponse(
         url=request.url,
         verdict=verdict,
@@ -298,7 +350,28 @@ def analyze(request: AnalyzeRequest) -> AnalysisResponse:
             "matched": bool(matched_sources),
             "providers": [provider.to_dict() for provider in providers],
         },
+        normalized_url=report["normalized_url"],
+        url_parts=report["url_parts"],
+        domain_info=report["domain_info"],
+        dns=report["dns"],
+        ip_intelligence=report["ip_intelligence"],
+        resolved_ip_addresses=report["resolved_ip_addresses"],
+        ssl=report["ssl"],
+        http=report["http"],
+        redirects=report["redirects"],
+        phishing=report["phishing"],
+        scan_metadata=report["scan_metadata"],
     )
+
+
+async def _safe_lookup(function, *args: Any) -> Any:
+    try:
+        return await asyncio.to_thread(function, *args)
+    except ValueError as exc:
+        return {"status": "blocked", "source": "PhishNet SSRF protection", "error": str(exc)}
+    except Exception as exc:
+        logger.warning("intelligence_provider_unavailable", provider=getattr(function, "__name__", "unknown"), error_type=type(exc).__name__)
+        return {"status": "unavailable", "source": "PhishNet", "error": "Provider unavailable."}
 
 
 def _indicators(
