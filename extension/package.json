@@ -1,0 +1,27 @@
+{
+  "name": "phishnet-extension",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b && vite build",
+    "dev": "vite --host",
+    "test": "vitest run",
+    "typecheck": "tsc -b --pretty"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.7",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "@fluentui/react-components": "^9.75.1",
+    "@fluentui/react-icons": "^2.0.345",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}

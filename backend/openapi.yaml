@@ -1,0 +1,106 @@
+openapi: 3.0.3
+info:
+  title: PhishNet API
+  version: 1.0.0
+  description: Explainable, request-scoped URL analysis. Submitted URLs are not persisted.
+servers:
+  - url: http://localhost:7071
+paths:
+  /api/health:
+    get:
+      operationId: getHealth
+      summary: Check API and optional-source configuration
+      responses:
+        "200":
+          description: API is available
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, services]
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, degraded, unhealthy]
+                  services:
+                    type: object
+  /api/analyze:
+    post:
+      operationId: analyzeUrl
+      summary: Validate and analyze one HTTP or HTTPS URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  minLength: 1
+                  maxLength: 2048
+                  format: uri
+      responses:
+        "200":
+          description: Explainable baseline result and optional source checks
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, verdict, indicators, sourceChecks]
+                properties:
+                  url:
+                    type: string
+                  verdict:
+                    type: string
+                    enum: [low_concern, review, high_risk]
+                  indicators:
+                    type: array
+                    items:
+                      type: object
+                      required: [code, label, detail]
+                      properties:
+                        code: { type: string }
+                        label: { type: string }
+                        detail: { type: string }
+                  sourceChecks:
+                    type: object
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: URL validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, details]
+          properties:
+            code:
+              type: string
+              enum: [VALIDATION_ERROR, BAD_REQUEST, NOT_FOUND, INTERNAL_ERROR]
+            message:
+              type: string
+            details:
+              type: array
+              nullable: true
+              items:
+                type: object

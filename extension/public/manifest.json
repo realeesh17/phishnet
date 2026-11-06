@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "PhishNet URL Checker",
+  "version": "1.0.0",
+  "description": "Check a URL for phishing indicators using your local PhishNet API.",
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "Check with PhishNet"
+  },
+  "permissions": ["activeTab"],
+  "host_permissions": [
+    "http://127.0.0.1:7071/*",
+    "http://localhost:7071/*"
+  ]
+}

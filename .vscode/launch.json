@@ -1,0 +1,45 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "PhishNet API (debug)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "app.main:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "7071"
+      ],
+      "cwd": "${workspaceFolder}/backend",
+      "env": {
+        "OPENPHISH_ENABLED": "false",
+        "PHISHTANK_API_KEY": ""
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "preLaunchTask": "phishnet-api: verify dependencies"
+    },
+    {
+      "name": "PhishNet Extension (debug)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/extension",
+      "preLaunchTask": "phishnet-extension: dev"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug All Services",
+      "configurations": [
+        "PhishNet API (debug)",
+        "PhishNet Extension (debug)"
+      ],
+      "preLaunchTask": "phishnet: start debug prerequisites",
+      "stopAll": true
+    }
+  ]
+}

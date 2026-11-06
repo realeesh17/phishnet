@@ -1,0 +1,15 @@
+{
+    "chat.editor.preferCopilotHarness": false,
+    "chat.defaultToCopilotHarness": false,
+    "debug.onTaskErrors": "debugAnyway",
+    "azureFunctions.showProjectWarning": false,
+    "azureFunctions.validateEmulators": false,
+    "files.exclude": {
+        "**/node_modules": true,
+        "**/.azurite": true
+    },
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/.azurite": true
+    }
+}

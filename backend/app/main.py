@@ -1,0 +1,290 @@
+from __future__ import annotations
+
+import os
+import time
+from enum import Enum
+from typing import Any, Literal
+
+import structlog
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+
+from .features import UrlFeatures, extract_features, parse_http_url, score_url
+from .threat_intel import ThreatIntel
+
+
+structlog.configure(
+    processors=[
+        structlog.processors.TimeStamper(fmt="iso", utc=True),
+        structlog.processors.add_log_level,
+        structlog.processors.JSONRenderer(),
+    ],
+)
+logger = structlog.get_logger("phishnet.api")
+
+
+class ErrorCode(str, Enum):
+    VALIDATION_ERROR = "VALIDATION_ERROR"
+    BAD_REQUEST = "BAD_REQUEST"
+    NOT_FOUND = "NOT_FOUND"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
+
+
+class ErrorBody(BaseModel):
+    code: ErrorCode
+    message: str
+    details: Any | None = None
+
+
+class ErrorResponse(BaseModel):
+    error: ErrorBody
+
+
+class AnalyzeRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=2048)
+
+
+class Indicator(BaseModel):
+    code: str
+    label: str
+    detail: str
+
+
+class SourceCheck(BaseModel):
+    status: Literal["not_configured", "available", "unavailable"]
+    matched: bool | None
+    error: str | None = None
+
+
+class AnalysisResponse(BaseModel):
+    url: str
+    verdict: Literal["low_concern", "review", "high_risk"]
+    indicators: list[Indicator]
+    sourceChecks: dict[str, SourceCheck]
+    # Diagnostic details supplement the approved plan response.
+    risk_score: float
+    model: str
+    features: dict[str, int | bool | None]
+    reasons: list[str]
+    threat_intelligence: dict[str, object]
+
+
+class HealthResponse(BaseModel):
+    status: Literal["healthy", "degraded", "unhealthy"]
+    services: dict[str, str]
+
+
+app = FastAPI(
+    title="PhishNet API",
+    description="Explainable URL risk analysis for the PhishNet Chrome extension.",
+    version="1.0.0",
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origin_regex=r"chrome-extension://[a-p]{32}",
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
+
+threat_intel = ThreatIntel()
+
+
+@app.middleware("http")
+async def log_request(request: Request, call_next):
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception(
+            "http_request_failed",
+            http_method=request.method,
+            http_path=request.url.path,
+        )
+        raise
+    logger.info(
+        "http_request_completed",
+        http_method=request.method,
+        http_path=request.url.path,
+        http_status=response.status_code,
+        duration_ms=round((time.perf_counter() - started) * 1000, 2),
+    )
+    return response
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(
+    _request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": {
+                "code": ErrorCode.VALIDATION_ERROR.value,
+                "message": "The request did not match the expected schema.",
+                "details": exc.errors(),
+            }
+        },
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_error_handler(_request: Request, exc: HTTPException) -> JSONResponse:
+    code = (
+        ErrorCode.VALIDATION_ERROR
+        if exc.status_code == 422
+        else ErrorCode.BAD_REQUEST
+        if exc.status_code == 400
+        else ErrorCode.NOT_FOUND
+        if exc.status_code == 404
+        else ErrorCode.INTERNAL_ERROR
+    )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "code": code.value,
+                "message": str(exc.detail),
+                "details": None,
+            }
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_error_handler(_request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("unhandled_api_error", error_type=type(exc).__name__)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": {
+                "code": ErrorCode.INTERNAL_ERROR.value,
+                "message": "An unexpected error occurred.",
+                "details": None,
+            }
+        },
+    )
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/api/health", response_model=HealthResponse)
+def api_health() -> HealthResponse:
+    return HealthResponse(
+        status="healthy",
+        services={
+            "analysis": "healthy",
+            "openphish": "available" if threat_intel.openphish_enabled else "not_configured",
+            "phishtank": "available" if threat_intel.phishtank_api_key else "not_configured",
+        },
+    )
+
+
+@app.post("/api/analyze", response_model=AnalysisResponse)
+def analyze(request: AnalyzeRequest) -> AnalysisResponse:
+    try:
+        parse_http_url(request.url)
+        features = extract_features(request.url)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    risk_score, reasons = score_url(features)
+    try:
+        providers = threat_intel.check(request.url)
+    except Exception:
+        # Optional enhancement providers must never suppress the baseline result.
+        logger.exception("threat_intelligence_unavailable")
+        providers = []
+    matched_sources = [
+        provider.name for provider in providers if provider.matched is True
+    ]
+
+    if matched_sources:
+        verdict = "high_risk"
+        risk_score = 1.0
+        reasons.insert(0, f"Threat intelligence reported a match: {', '.join(matched_sources)}.")
+    elif risk_score >= 0.65:
+        verdict = "review"
+    else:
+        verdict = "low_concern"
+
+    indicators = [
+        Indicator(code=code, label=label, detail=detail)
+        for code, label, detail in _indicators(features, reasons)
+    ]
+    source_checks: dict[str, SourceCheck] = {}
+    source_names = {"openphish": "OpenPhish", "phishtank": "PhishTank"}
+    for key, source_name in source_names.items():
+        provider = next(
+            (item for item in providers if item.name.lower() == source_name.lower()),
+            None,
+        )
+        configured = (
+            threat_intel.openphish_enabled if key == "openphish"
+            else bool(threat_intel.phishtank_api_key)
+        )
+        source_status = (
+            "not_configured" if not configured
+            else "unavailable" if provider is None or provider.status == "unavailable"
+            else "available"
+        )
+        source_checks[key] = SourceCheck(
+            status=source_status,
+            matched=provider.matched if provider else None,
+            error=provider.error if provider else "Provider check failed.",
+        )
+
+    return AnalysisResponse(
+        url=request.url,
+        verdict=verdict,
+        indicators=indicators,
+        sourceChecks=source_checks,
+        risk_score=risk_score,
+        model="transparent_heuristic_v1",
+        features=features.to_dict(),
+        reasons=reasons,
+        threat_intelligence={
+            "matched": bool(matched_sources),
+            "providers": [provider.to_dict() for provider in providers],
+        },
+    )
+
+
+def _indicators(
+    features: UrlFeatures, reasons: list[str]
+) -> list[tuple[str, str, str]]:
+    mapped = [
+        ("https", "HTTPS scheme", features.uses_https, "The URL uses HTTPS."),
+        ("http", "HTTP scheme", not features.uses_https, "The URL does not use HTTPS."),
+        ("ip_host", "IP-literal hostname", features.is_ip_host, "The host is an IP address."),
+        ("long_url", "URL length", features.url_length > 75, "The URL is longer than typical."),
+        ("subdomains", "Subdomain count", features.subdomain_count > 1, "The hostname has multiple subdomains."),
+        ("suspicious_terms", "URL terms", features.suspicious_keyword_count > 0, "Sign-in, account, or verification terms appear in the URL."),
+        ("userinfo", "Embedded user information", features.has_userinfo, "The URL includes user information before the host."),
+        ("punycode", "Punycode hostname", features.has_punycode, "The hostname contains an internationalized punycode label."),
+    ]
+    active = [
+        (code, label, detail)
+        for code, label, detected, detail in mapped
+        if detected
+    ]
+    if not active:
+        return [("baseline", "Baseline check", reasons[0])]
+    return active
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host=os.getenv("PHISHNET_HOST", "127.0.0.1"),
+        port=int(os.getenv("PHISHNET_PORT", "7071")),
+        reload=False,
+    )

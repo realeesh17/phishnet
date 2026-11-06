@@ -1,0 +1,54 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "shell",
+      "label": "phishnet-api: verify dependencies",
+      "command": "python -c \"import fastapi, uvicorn; print('FastAPI and Uvicorn are available')\"",
+      "options": {
+        "cwd": "${workspaceFolder}/backend"
+      },
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1,
+        "instancePolicy": "silent"
+      }
+    },
+    {
+      "type": "shell",
+      "label": "phishnet-extension: dev",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/extension"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITE",
+          "endsPattern": "Local:"
+        }
+      },
+      "runOptions": {
+        "instanceLimit": 1,
+        "instancePolicy": "silent"
+      }
+    },
+    {
+      "label": "phishnet: start debug prerequisites",
+      "dependsOn": [
+        "phishnet-api: verify dependencies",
+        "phishnet-extension: dev"
+      ],
+      "dependsOrder": "sequence",
+      "runOptions": {
+        "instanceLimit": 1,
+        "instancePolicy": "silent"
+      }
+    }
+  ]
+}

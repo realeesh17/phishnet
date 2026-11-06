@@ -1,0 +1,8 @@
+.venv/
+.python_packages/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+tests/
+ml-requirements.txt
+scripts/
