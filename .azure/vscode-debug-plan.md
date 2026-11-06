@@ -3,10 +3,10 @@
 > This plan is the source of truth for generating the
 > VS Code debug setup in this workspace.
 >
-> **Status:** Executing
+> **Status:** Implemented
 > **Execution Mode:** Guided
 > **Created:** 2026-11-06T11:42:42+05:30
-> **Last Updated:** 2026-11-06T11:58:15+05:30
+> **Last Updated:** 2026-11-06T12:03:46+05:30
 >
 > <!-- Guided Mode (default) - hand-holds the user through review and approval before generating. -->
 
@@ -136,17 +136,17 @@ No additional convenience scripts are planned. Existing `npm run dev`, `npm run 
 - Keep the existing Uvicorn/debugpy target at `127.0.0.1:7071`; do not add an Azure Functions-host target or emulator startup task.
 - Preserve and merge the existing `.vscode/launch.json` and `.vscode/tasks.json`. Their entries already match the selected Uvicorn, Vite, and compound setup, so no configuration-file rewrite was needed.
 - Leave `docker-compose.yml`, application source, and the three existing API smoke scripts unchanged. Do not add the invalid-input smoke test.
-- Do not deploy or start services. Static JSON and task-reference validation was performed; live launch/compound validation is deferred.
+- No deployment was performed. For runtime validation, Uvicorn and Vite were started temporarily; `GET /api/health` returned HTTP 200 directly and through the Vite `/api` proxy, and the Vite root page returned HTTP 200. Both processes were stopped afterward. The actual VS Code F5 compound/debugger attachment was not launched.
 
 ## Debug Configuration Checklist
 
 ✅ PhishNet API (debug) — `launch.json` parsed; the Uvicorn/debugpy module, `127.0.0.1:7071`, and its pre-launch task were verified statically. The existing recorded smoke results above are historical; no service or debugger was started for this execution.
 ✅ PhishNet Extension (debug) — `launch.json` and `tasks.json` parsed; the Chrome target, `http://localhost:5173`, Vite task reference, and `npm run dev` script were verified statically. No dev server or browser was started for this execution.
-❌ Debug All Services — Static references resolve, but live VS Code compound orchestration/readiness was not run, as requested. Startup ordering and debugger attachment remain unverified.
+⚠️ Debug All Services — The API, Vite server, and `/api` proxy passed a live startup check. The VS Code F5 compound orchestration and debugger attachment remain unverified.
 
 ## Generation and Validation Limitations
 
-- **Python debug support:** The generated API configuration uses the Python `debugpy` adapter to launch the README-documented FastAPI/Uvicorn fallback, not the Azure Functions Python worker. The Functions/Python reference is marked planned, and Azure Functions Core Tools was not installed or available on PATH. Select an interpreter with the backend requirements installed and install/recommend the VS Code Python and Python Debugger extensions. Add a separate Functions-host debugging path only after Core Tools and its local storage dependency are available.
+- **Python debug support:** The selected API configuration uses the Python `debugpy` adapter to launch the README-documented FastAPI/Uvicorn fallback, not the Azure Functions Python worker. The workspace recommends the VS Code Python and Python Debugger extensions. Azure Functions Core Tools was not installed or available on PATH, and a Functions-host target is not part of this setup.
 - **Docker/Compose:** Docker was unavailable. Docker was not installed or started, Compose was not invoked or validated, and no claim is made that the existing `docker-compose.yml` runs. The file remains unchanged. No Azurite startup task is included in this fallback configuration.
-- **Compound:** Per-service server/build smoke checks passed as recorded above; the actual VS Code compound launch was not run, so its coordinated debugger behavior is explicitly unverified.
-- **This execution:** No services, emulators, smoke scripts, or deployment were started. The plan remains `Executing` until live validation is explicitly allowed and completed.
+- **Compound:** Backend tests passed (9 tests), extension tests passed (3 tests), and the extension production build succeeded. The actual VS Code compound launch was not run, so coordinated debugger attachment remains unverified.
+- **This execution:** No emulators, existing API smoke scripts, or deployment were started. Temporary Uvicorn and Vite processes were used for HTTP readiness/proxy validation and then stopped.
