@@ -1,0 +1,30 @@
+unit: popup
+side_effects:
+  - source_loc: extension/src/App.tsx:84
+    effect: "request API health on popup mount"
+    must_preserve: true
+  - source_loc: extension/src/App.tsx:101
+    effect: "submit manual URL to analysis API"
+    must_preserve: true
+branches:
+  - source_loc: extension/src/App.tsx:106
+    condition: "active tab is missing or not HTTP(S)"
+    behavior: "show a user-visible restricted-tab error"
+    must_preserve: true
+  - source_loc: extension/src/App.tsx:193
+    condition: "analysis request fails"
+    behavior: "show error and retry action"
+    must_preserve: true
+error_paths:
+  - source_loc: extension/src/App.tsx:193
+    trigger: "API unavailable or validation failure"
+    outcome: "show error without replacing a successful prior result"
+    contract: "user-visible error message"
+    must_preserve: true
+concurrency:
+  model: event-loop
+  tx_boundary:
+    source_loc: extension/src/App.tsx:95
+    scope: "one active scan request at a time"
+    isolation: "none"
+    must_preserve: true

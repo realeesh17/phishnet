@@ -1,0 +1,33 @@
+contracts:
+  - name: analyze-response
+    unit: api-analyze
+    type: rest
+    stability: must_preserve
+    source_loc: backend/app/main.py:234
+    contract:
+      method: POST
+      path: /api/analyze
+      request: "{url: string}"
+      response: "Legacy fields plus additive intelligence, phishing, threat_intelligence, and scan_metadata fields"
+      error: "422 validation, 413 request limit, 429 rate limit"
+      auth: "none in local configuration"
+    target_contract:
+      method: "POST /api/analyze -> AnalysisResponse"
+      notes: "Keep url, verdict, indicators, sourceChecks, risk_score, model, features, reasons, and threat_intelligence."
+    semantic_divergence: []
+  - name: health-response
+    unit: api-health
+    type: rest
+    stability: frozen
+    source_loc: backend/app/main.py:222
+    contract:
+      method: GET
+      path: /api/health
+      request: "none"
+      response: "{status: string, services: object}"
+      error: "standard error envelope"
+      auth: "none in local configuration"
+    target_contract:
+      method: "GET /api/health -> HealthResponse"
+      notes: "Preserve service status keys."
+    semantic_divergence: []

@@ -1,0 +1,21 @@
+unit: popup
+bindings:
+  - type: route-declaration
+    name: "Manifest V3 action.default_popup"
+    source_loc: extension/public/manifest.json:7
+    target: extension/index.html
+    must_appear_in_target: true
+    notes: "Popup is the extension action entry point."
+  - type: convention
+    name: "chrome.tabs.query activeTab/currentWindow"
+    source_loc: extension/src/App.tsx:106
+    target: "active tab URL lookup"
+    must_appear_in_target: true
+    notes: "Do not collect browsing history or page contents."
+runtime_config:
+  - key: VITE_PHISHNET_API_BASE_URL
+    source_loc: extension/src/api/httpClient.ts:3
+    source: env
+    default_value: "http://localhost:7071/api in production builds"
+    must_appear_in_target: true
+    notes: "Frontend API origin."

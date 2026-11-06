@@ -1,0 +1,7 @@
+unit: popup
+commit: false
+candidate_splits:
+  - id: extension/src/App.tsx:1
+    drivers: [concern_split]
+    rationale: "The popup combines active-tab acquisition, scan orchestration, and multi-section result rendering; these are separable concerns after behavior is stable."
+    source_slice: {file: extension/src/App.tsx, lines: [1, 420]}

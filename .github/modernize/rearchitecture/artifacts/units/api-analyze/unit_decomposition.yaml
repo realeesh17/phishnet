@@ -1,0 +1,7 @@
+unit: api-analyze
+commit: false
+candidate_splits:
+  - id: backend/app/main.py:234
+    drivers: [concern_split, execution_model_split]
+    rationale: "The analysis route currently owns URL parsing, feature scoring, provider lookups, and response shaping; separate bounded services reduce provider failure coupling."
+    source_slice: {file: backend/app/main.py, lines: [234, 301]}

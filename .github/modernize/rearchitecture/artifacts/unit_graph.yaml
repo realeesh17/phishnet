@@ -1,0 +1,42 @@
+units:
+  - name: popup
+    trigger: page
+    trigger_detail: "Chrome action popup open and URL form submission"
+    source_anchors:
+      - path: extension/src/App.tsx
+        line: 1
+      - path: extension/public/manifest.json
+        line: 6
+    exported_signature: []
+    dynamic_entrypoints: []
+    depends_on:
+      - unit: api-analyze
+        via: "ApiClient.analyze"
+      - unit: api-health
+        via: "ApiClient.getHealth"
+    shared_refs: []
+  - name: api-analyze
+    trigger: api
+    trigger_detail: "POST /api/analyze"
+    source_anchors:
+      - path: backend/app/main.py
+        line: 234
+      - path: backend/app/features.py
+        line: 41
+    exported_signature:
+      - method: "AnalysisResponse analyze(AnalyzeRequest)"
+        source_loc: backend/app/main.py:235
+        stability: must_preserve
+    dynamic_entrypoints: []
+    depends_on: []
+    shared_refs: []
+  - name: api-health
+    trigger: api
+    trigger_detail: "GET /health and GET /api/health"
+    source_anchors:
+      - path: backend/app/main.py
+        line: 217
+    exported_signature: []
+    dynamic_entrypoints: []
+    depends_on: []
+    shared_refs: []

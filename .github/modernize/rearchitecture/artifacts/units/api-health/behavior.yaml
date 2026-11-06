@@ -1,0 +1,15 @@
+unit: api-health
+side_effects: []
+branches:
+  - source_loc: backend/app/main.py:224
+    condition: "optional threat provider is configured"
+    behavior: "report available or not_configured service status"
+    must_preserve: true
+error_paths: []
+concurrency:
+  model: sync
+  tx_boundary:
+    source_loc: backend/app/main.py:222
+    scope: "read-only health response"
+    isolation: "none"
+    must_preserve: true

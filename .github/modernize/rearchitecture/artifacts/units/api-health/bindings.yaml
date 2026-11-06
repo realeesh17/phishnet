@@ -1,0 +1,9 @@
+unit: api-health
+bindings:
+  - type: route-declaration
+    name: "GET /api/health"
+    source_loc: backend/app/main.py:222
+    target: api_health
+    must_appear_in_target: true
+    notes: "Keep health endpoint available to the popup."
+runtime_config: []

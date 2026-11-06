@@ -1,0 +1,30 @@
+user_intent:
+  raw_request: "Extend the existing PhishNet extension and FastAPI backend into a URL intelligence scanner."
+  inferred_acceptance: ["preserve existing API integrations", "preserve working popup behavior", "add secure intelligence results"]
+  cleanup_required: false
+strategy: phased
+runtime_reachable:
+  - extension/src/App.tsx
+  - extension/src/api/types.ts
+  - extension/src/api/httpClient.ts
+  - extension/public/manifest.json
+  - backend/app/main.py
+  - backend/app/features.py
+must_rewrite:
+  - path: backend/app/main.py
+    reason: "additive analysis response and orchestration"
+  - path: extension/src/App.tsx
+    reason: "automatic active-tab scan and intelligence dashboard"
+  - path: extension/src/api/types.ts
+    reason: "typed additive response contract"
+  - path: extension/public/manifest.json
+    reason: "minimum active-tab/API access for popup scan"
+copy_as_is:
+  - backend/app/security.py
+  - backend/app/threat_intel.py
+legacy_allowed_to_remain:
+  - backend/app/features.py
+defer_cleanup:
+  - "Retain legacy fields and heuristic names until downstream consumers migrate."
+full_rewrite_reason: null
+implementation_rule: "Use must_rewrite for implementation scope; source anchors are not rewrite targets by themselves."

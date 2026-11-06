@@ -1,0 +1,31 @@
+unit: api-analyze
+side_effects:
+  - source_loc: backend/app/main.py:244
+    effect: "query optional OpenPhish and PhishTank providers"
+    must_preserve: true
+branches:
+  - source_loc: backend/app/main.py:237
+    condition: "URL parsing or security validation fails"
+    behavior: "return 422 validation error envelope"
+    must_preserve: true
+  - source_loc: backend/app/main.py:253
+    condition: "threat provider reports a match"
+    behavior: "override verdict to high_risk and score to 1.0"
+    must_preserve: true
+  - source_loc: backend/app/main.py:245
+    condition: "optional provider fails"
+    behavior: "return baseline analysis with unavailable provider status"
+    must_preserve: true
+error_paths:
+  - source_loc: backend/app/main.py:239
+    trigger: "malformed, non-HTTP(S), local, private, or reserved URL"
+    outcome: "422 standard error envelope"
+    contract: "VALIDATION_ERROR"
+    must_preserve: true
+concurrency:
+  model: async
+  tx_boundary:
+    source_loc: backend/app/main.py:234
+    scope: "one request gathers independent intelligence without persistent writes"
+    isolation: "none"
+    must_preserve: true

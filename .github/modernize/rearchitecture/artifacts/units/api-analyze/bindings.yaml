@@ -1,0 +1,15 @@
+unit: api-analyze
+bindings:
+  - type: route-declaration
+    name: "POST /api/analyze"
+    source_loc: backend/app/main.py:234
+    target: analyze
+    must_appear_in_target: true
+    notes: "Response remains compatible with the extension client."
+runtime_config:
+  - key: PHISHNET_MAX_CONCURRENT_REQUESTS
+    source_loc: backend/app/security.py:32
+    source: env
+    default_value: "32"
+    must_appear_in_target: true
+    notes: "Bounds concurrent scans."
