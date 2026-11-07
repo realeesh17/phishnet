@@ -21,7 +21,7 @@ def build_phishing_analysis(
     if domain_info.get("recently_registered"):
         findings.append({"name": "Recently registered domain", "severity": "medium", "explanation": "New domains deserve additional review; age alone is not proof of phishing.", "evidence": f"{domain_info.get('domain_age_days')} days old", "source": "RDAP", "kind": "heuristic"})
     if features.is_ip_host:
-        findings.append({"name": "IP address used as host", "severity": "medium", "explanation": "IP literals are less typical for consumer websites and can make impersonation easier.", "evidence": features.domain, "source": "URL parser", "kind": "heuristic"})
+        findings.append({"name": "IP address used as host", "severity": "medium", "explanation": "IP literals are less typical for consumer websites and can make impersonation easier.", "evidence": "IP literal hostname", "source": "URL parser", "kind": "heuristic"})
     if features.suspicious_keyword_count:
         findings.append({"name": "Suspicious URL terms", "severity": "low", "explanation": "Account, sign-in, or verification terms appear in the URL.", "evidence": f"{features.suspicious_keyword_count} matching term(s)", "source": "URL parser", "kind": "heuristic"})
     if http_info.get("redirect_count", 0) > 2:

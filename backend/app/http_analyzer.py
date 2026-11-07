@@ -77,7 +77,7 @@ def _request_once(parsed: ParsedUrl, address: str) -> dict[str, Any]:
             try:
                 connection = context.wrap_socket(raw_socket, server_hostname=parsed.hostname)
                 tls_error = None
-            except ssl.SSLCertVerificationError as exc:
+            except ssl.SSLCertVerificationError:
                 raw_socket.close()
                 raw_socket = socket.create_connection((address, parsed.port), timeout=4)
                 connection = ssl._create_unverified_context().wrap_socket(raw_socket, server_hostname=parsed.hostname)

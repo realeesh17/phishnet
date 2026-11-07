@@ -366,7 +366,7 @@ async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
 
 async def _safe_lookup(function, *args: Any) -> Any:
     try:
-        return await asyncio.to_thread(function, *args)
+        return await asyncio.wait_for(asyncio.to_thread(function, *args), timeout=5)
     except ValueError as exc:
         return {"status": "blocked", "source": "PhishNet SSRF protection", "error": str(exc)}
     except Exception as exc:
