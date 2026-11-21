@@ -1,6 +1,8 @@
 azure-functions<2.0,>=1.17
 fastapi<1.0,>=0.115
 structlog<26.0,>=24.1
+limits[redis]<6.0,>=4.0
+dnspython<3.0,>=2.6
 
 [dev]
 httpx<1.0,>=0.27
